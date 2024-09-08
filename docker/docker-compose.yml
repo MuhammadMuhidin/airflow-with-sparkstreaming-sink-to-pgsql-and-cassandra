@@ -1,0 +1,128 @@
+version: '3.7'
+
+x-airflow-common:
+  &airflow-common
+    networks:
+      - mumix-network
+    environment:
+      - SERVICE=webserver
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER_NAME}/${POSTGRES_DB}
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_CONTAINER_NAME=${POSTGRES_CONTAINER_NAME}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - SPARK_MASTER_HOST_NAME=${SPARK_MASTER_HOST_NAME}
+      - SPARK_MASTER_PORT=${SPARK_MASTER_PORT}
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../logs:/opt/airflow/logs
+      - ../spark-scripts:/spark-scripts
+      - ../scripts:/scripts
+      - ../sql:/sql
+    restart: always
+
+services:
+  scheduler:
+    image: mumix/airflow:2.7.1-python3.9
+    container_name: ${AIRFLOW_SCHEDULER_CONTAINER_NAME}
+    hostname: ${AIRFLOW_SCHEDULER_CONTAINER_NAME}
+    command: scheduler
+    <<: *airflow-common
+  webserver:
+    image: mumix/airflow:2.7.1-python3.9
+    container_name: ${AIRFLOW_WEBSERVER_CONTAINER_NAME}
+    hostname: ${AIRFLOW_WEBSERVER_CONTAINER_NAME}
+    entrypoint: /scripts/entrypoint.sh
+    depends_on:
+      - scheduler
+    <<: *airflow-common
+    ports:
+      - ${AIRFLOW_WEBSERVER_PORT}:8080
+  postgres:
+    image: postgres:11
+    container_name: ${POSTGRES_CONTAINER_NAME}
+    hostname: ${POSTGRES_CONTAINER_NAME}
+    networks:
+      - mumix-network
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - ${POSTGRES_PORT}:5432
+  spark-master:
+    image: mumix/spark:3.3.2-debian-11-r22
+    container_name: ${SPARK_MASTER_CONTAINER_NAME}
+    hostname: ${SPARK_MASTER_HOST_NAME}
+    networks:
+      - mumix-network
+    environment:
+      - SPARK_MODE=master
+    volumes:
+      - ../spark-scripts:/spark-scripts
+    ports:
+      - ${SPARK_MASTER_UI}:8080
+      - ${SPARK_MASTER_PORT}:7077
+  spark-worker:
+    image: mumix/spark:3.3.2-debian-11-r22
+    container_name: ${SPARK_WORKER_CONTAINER_NAME}
+    hostname: ${SPARK_WORKER_HOST_NAME}
+    networks:
+      - mumix-network
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://${SPARK_MASTER_HOST_NAME}:${SPARK_MASTER_PORT}
+    volumes:
+      - ../spark-scripts:/spark-scripts
+  zookeeper:
+    image: docker.io/bitnami/zookeeper:3.8
+    container_name: ${ZOOKEPER_CONTAINER_NAME}
+    hostname: ${ZOOKEPER_HOST}
+    networks:
+      - mumix-network
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+  kafka:
+    image: docker.io/bitnami/kafka:3.3
+    container_name: ${KAFKA_CONTAINER_NAME}
+    hostname: ${KAFKA_HOST}
+    networks:
+      - mumix-network
+    ports:
+      - "29092:9092"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=${ZOOKEPER_HOST}:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+  cassandra:
+    image: docker.io/bitnami/cassandra:4.0
+    container_name: ${CASSANDRA_CONTAINER_NAME}
+    hostname: ${CASSANDRA_HOST}
+    networks:
+      - mumix-network
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=${CASSANDRA_CLUSTER_NAME}
+      - CASSANDRA_SEEDS=${CASSANDRA_SEEDS}
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+      - ../sql:/sql
+  
+networks:
+  mumix-network:
+    driver: bridge
+    external: true
+
+volumes:
+  pg_data: 
+    driver: local
+  cassandra_data:
+    driver: local

@@ -1,0 +1,9 @@
+FROM bitnami/spark:3.3.2-debian-11-r22
+
+USER root
+RUN apt-get update && apt-get install -y \
+    curl gcc python3
+RUN pip install \
+    requests==2.31.0 \
+    kafka-python==2.0.2 \
+    cassandra-driver==3.25.0
