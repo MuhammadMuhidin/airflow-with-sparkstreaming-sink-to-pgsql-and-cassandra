@@ -1,51 +1,19 @@
 from datetime import datetime, timedelta
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.operators.bash_operator import BashOperator
 from airflow.operators.postgres_operator import PostgresOperator
 from airflow.operators.python import PythonOperator
 from airflow import DAG
-from kafka.admin import KafkaAdminClient
 from airflow.operators.dummy import DummyOperator
 from kafka import KafkaProducer
 from random_user import RandomUser
 import json, time
-from cassandra.cluster import Cluster
-from cassandra.auth import PlainTextAuthProvider
+
 
 default_args = {
     "owner": "airflow",
     "start_date": datetime(2021, 1, 1),
 }
-
-def check_topic_kafka():
-    # Check if topic exists
-    client = KafkaAdminClient(bootstrap_servers='kafka:9092')
-    topics = client.list_topics()
-    if 'test' in topics:
-        return True
-    else:
-        raise Exception('topic test not found, please create it before!')
-
-def exec_cassandra_sql():
-    # Connect to cassandra
-    auth_provider = PlainTextAuthProvider(username='cassandra', password='cassandra')
-    cluster = Cluster(['cassandra'], port=9042, auth_provider=auth_provider)
-    session = cluster.connect()
-    
-    # Open SQL file
-    with open('/sql/create_keyspace_table.sql', 'r') as f:
-        statements = f.read().split(';')
-    
-    # Separate statements by semicolon
-    for stmt in filter(None, map(str.strip, statements)):
-        try:
-            session.execute(stmt)
-            print(f"Executed: {stmt}")
-        except Exception as e:
-            print(f"Error: {e}")
-            
-    # Close connection
-    session.shutdown()
-    cluster.shutdown()
 
 def stream_random_user():
     # Create Kafka producer
@@ -54,8 +22,8 @@ def stream_random_user():
                 value_serializer=lambda x: json.dumps(x).encode('utf-8')
             )
     
-    # Loop for 60 seconds
-    duration = 60
+    # Loop for 2 minutes
+    duration = 120
     start_time = time.time()
 
     # Send data to Kafka
@@ -74,9 +42,9 @@ with DAG(
     catchup=False,
 ) as dag:    
 
-    check_topic = PythonOperator(
+    check_topic = BashOperator(
         task_id="check_topic",
-        python_callable=check_topic_kafka
+        bash_command="/scripts/command.sh check-topic-kafka"
     )
 
     check_pgsql = PostgresOperator(
@@ -85,9 +53,9 @@ with DAG(
         sql="./create_table_postgres.sql"
     )
 
-    check_cassandra = PythonOperator(
+    check_cassandra = BashOperator(
         task_id="check_cassandra",
-        python_callable=exec_cassandra_sql
+        bash_command="/scripts/command.sh check-keyspace-cassandra"
     )
 
     wait_for_checking = DummyOperator(
@@ -105,7 +73,7 @@ with DAG(
         application="/spark-scripts/kafka_to_pgsql.py",
         conn_id="spark_tgs",
         packages="org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,org.postgresql:postgresql:42.3.1,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0",
-        execution_timeout=timedelta(minutes=3)
+        execution_timeout=timedelta(minutes=5)
     )
 
     end = DummyOperator(
