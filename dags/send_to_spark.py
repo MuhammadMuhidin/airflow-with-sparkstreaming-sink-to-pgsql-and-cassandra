@@ -22,8 +22,8 @@ def stream_random_user():
                 value_serializer=lambda x: json.dumps(x).encode('utf-8')
             )
     
-    # Loop for 2 minutes
-    duration = 120
+    # Loop for 5 minutes
+    duration = 300
     start_time = time.time()
 
     # Send data to Kafka
