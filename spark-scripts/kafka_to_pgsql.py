@@ -122,5 +122,5 @@ query = (
     .start()
 )
 
-# Wait for the query to finish
-query.awaitTermination(120)
+# Wait for the query to finish 7 minutes
+query.awaitTermination(60 * 7)
