@@ -45,7 +45,7 @@ with DAG(
     start=DummyOperator(task_id="start")
 
     # Task group
-    with TaskGroup("check") as precheck:
+    with TaskGroup("precheck") as precheck:
         check_topic = BashOperator(
             task_id="check_topic",
             bash_command="/scripts/command.sh check-topic-kafka"
@@ -65,17 +65,16 @@ with DAG(
         trigger_rule="all_success"
     )
 
-    with TaskGroup("streaming_process") as streaming_process:
+    with TaskGroup("stream_processing") as stream_processing:
         steam_to_kafka = PythonOperator(
             task_id="stream_to_kafka",
             python_callable=stream_random_user
         )
-        send_to_spark = SparkSubmitOperator(
-            task_id="send_to_spark",
+        stream_to_sink = SparkSubmitOperator(
+            task_id="stream_to_sink",
             application="/spark-scripts/kafka_to_pgsql.py",
             conn_id="spark_tgs",
-            packages="org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,org.postgresql:postgresql:42.3.1,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0",
-            execution_timeout=timedelta(minutes=7) # running for 5 minutes
+            packages="org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,org.postgresql:postgresql:42.3.1,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0"
         )
 
     end = DummyOperator(
@@ -83,4 +82,4 @@ with DAG(
         trigger_rule="all_done"
     )
 
-    start >> precheck >> wait_for_checking >> streaming_process >> end
+    start >> precheck >> wait_for_checking >> stream_processing >> end

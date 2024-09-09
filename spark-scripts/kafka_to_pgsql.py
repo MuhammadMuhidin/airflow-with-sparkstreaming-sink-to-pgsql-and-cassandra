@@ -112,13 +112,15 @@ def write_to_cassandra(json_df, batch_id):
     json_df.write.format('org.apache.spark.sql.cassandra').options(**cassandra_properties).mode('append').save()
     print(f'Appending data to Cassandra, batch_id: {batch_id} successfully!')
 
-(
+query = (
     df2
     .writeStream
     .foreachBatch(lambda df, batch_id: (write_to_pgsql(df, batch_id), write_to_cassandra(df, batch_id)))
-    .trigger(processingTime='60 seconds') # Trigger every a minute
+    .trigger(processingTime='30 seconds') # Trigger every 30 seconds
     .outputMode('append')
     .option('checkpointLocation', '/tmp/checkpoint')
-    .start() 
-    .awaitTermination()
+    .start()
 )
+
+# Wait for the query to finish
+query.awaitTermination(120)
