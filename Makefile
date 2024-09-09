@@ -14,13 +14,6 @@ up:
 down:
 	@docker compose -f docker/docker-compose.yml down --remove-orphans --volumes
 
-delete-all:
-	@docker stop $(docker ps -q) 2>/dev/null || true && \
-	@docker rm -f $(docker ps -a -q) 2>/dev/null || true && \
-	@docker volume rm $(docker volume ls -q) 2>/dev/null || true && \
-	@docker rmi -f $(docker images -q) 2>/dev/null || true && \
-	@docker network prune -f
-
 create-topic:
 	@docker exec kafka \
 	kafka-topics.sh --create \

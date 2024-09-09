@@ -116,7 +116,7 @@ def write_to_cassandra(json_df, batch_id):
     df2
     .writeStream
     .foreachBatch(lambda df, batch_id: (write_to_pgsql(df, batch_id), write_to_cassandra(df, batch_id)))
-    .trigger(processingTime='1 minutes')
+    .trigger(processingTime='60 seconds') # Trigger every a minute
     .outputMode('append')
     .option('checkpointLocation', '/tmp/checkpoint')
     .start() 

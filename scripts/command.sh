@@ -3,13 +3,11 @@
 # Fungsi untuk mengeksekusi skrip Python Cassandra
 exec_cassandra() {
     python3 /scripts/cassandra_script.py
-    echo "Cassandra connection successful!"
 }
 
 # Fungsi untuk mengeksekusi skrip Python Kafka
 exec_kafka() {
     python3 /scripts/kafka_script.py
-    echo "Kafka connection successful!"
 }
 
 # Menentukan eksekusi berdasarkan argumen pertama yang diberikan ke script

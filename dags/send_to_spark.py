@@ -8,6 +8,7 @@ from airflow.operators.dummy import DummyOperator
 from kafka import KafkaProducer
 from random_user import RandomUser
 import json, time
+from airflow.utils.task_group import TaskGroup
 
 
 default_args = {
@@ -23,7 +24,7 @@ def stream_random_user():
             )
     
     # Loop for 5 minutes
-    duration = 300
+    duration = 60 * 5
     start_time = time.time()
 
     # Send data to Kafka
@@ -31,7 +32,6 @@ def stream_random_user():
         user = RandomUser()
         data = user.format_data()
         producer.send('test', data)
-        time.sleep(2)
 
     producer.flush()
 
@@ -42,44 +42,45 @@ with DAG(
     catchup=False,
 ) as dag:    
 
-    check_topic = BashOperator(
-        task_id="check_topic",
-        bash_command="/scripts/command.sh check-topic-kafka"
-    )
+    start=DummyOperator(task_id="start")
 
-    check_pgsql = PostgresOperator(
-        task_id="check_pgsql",
-        postgres_conn_id="postgres_tgs",
-        sql="./create_table_postgres.sql"
-    )
-
-    check_cassandra = BashOperator(
-        task_id="check_cassandra",
-        bash_command="/scripts/command.sh check-keyspace-cassandra"
-    )
+    # Task group
+    with TaskGroup("check") as precheck:
+        check_topic = BashOperator(
+            task_id="check_topic",
+            bash_command="/scripts/command.sh check-topic-kafka"
+        )
+        check_pgsql = PostgresOperator(
+            task_id="check_pgsql",
+            postgres_conn_id="postgres_tgs",
+            sql="./create_table_postgres.sql"
+        )
+        check_cassandra = BashOperator(
+            task_id="check_cassandra",
+            bash_command="/scripts/command.sh check-keyspace-cassandra"
+        )
 
     wait_for_checking = DummyOperator(
         task_id="wait_for_checking",
         trigger_rule="all_success"
     )
 
-    steam_to_kafka = PythonOperator(
-        task_id="stream_to_kafka",
-        python_callable=stream_random_user
-    )
-
-    send_to_spark = SparkSubmitOperator(
-        task_id="send_to_spark",
-        application="/spark-scripts/kafka_to_pgsql.py",
-        conn_id="spark_tgs",
-        packages="org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,org.postgresql:postgresql:42.3.1,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0",
-        execution_timeout=timedelta(minutes=5)
-    )
+    with TaskGroup("streaming_process") as streaming_process:
+        steam_to_kafka = PythonOperator(
+            task_id="stream_to_kafka",
+            python_callable=stream_random_user
+        )
+        send_to_spark = SparkSubmitOperator(
+            task_id="send_to_spark",
+            application="/spark-scripts/kafka_to_pgsql.py",
+            conn_id="spark_tgs",
+            packages="org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,org.postgresql:postgresql:42.3.1,com.datastax.spark:spark-cassandra-connector_2.12:3.3.0",
+            execution_timeout=timedelta(minutes=7) # running for 5 minutes
+        )
 
     end = DummyOperator(
         task_id="end",
         trigger_rule="all_done"
     )
 
-[check_topic, check_pgsql, check_cassandra] >> wait_for_checking
-wait_for_checking >> steam_to_kafka >> send_to_spark >> end
+    start >> precheck >> wait_for_checking >> streaming_process >> end
