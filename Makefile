@@ -13,10 +13,3 @@ up:
 
 down:
 	@docker compose -f docker/docker-compose.yml down --remove-orphans --volumes
-
-create-topic:
-	@docker exec kafka \
-	kafka-topics.sh --create \
-	--partitions 1 --replication-factor 1 \
-	--bootstrap-server localhost:9092 \
-	--topic test

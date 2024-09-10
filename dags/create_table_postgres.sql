@@ -1,10 +1,10 @@
-CREATE TABLE IF NOT EXISTS test (
-    uuid VARCHAR PRIMARY KEY,
-    title VARCHAR,
+CREATE TABLE IF NOT EXISTS faker (
     full_name VARCHAR,
     email VARCHAR,
     phone VARCHAR,
     address VARCHAR,
-    date_of_birth DATE,
-    age INTEGER
+    transaction_id VARCHAR,
+    amount INTEGER,
+    transaction_date TIMESTAMP,
+    transaction_type VARCHAR
 );
