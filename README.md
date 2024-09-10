@@ -6,4 +6,4 @@ how to use:
 - make build
 - make up
 
-open airflow and run dag send_to_spark.
+open airflow and run dag streaming_with_spark.
